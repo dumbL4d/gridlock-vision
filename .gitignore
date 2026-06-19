@@ -23,6 +23,15 @@ data/test_images/*.jpg
 data/test_images/*.jpeg
 data/test_images/*.png
 
+# Large model files in root (use models/ instead)
+/yolov8s.pt
+/yolov8n.pt
+/yolov8x.pt
+/best.pt
+
+# Large CSV datasets (script auto-generates sample data)
+data/*.csv
+
 # OS files
 .DS_Store
 Thumbs.db

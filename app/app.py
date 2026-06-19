@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import uuid
+import numpy as np
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_from_directory
 
@@ -25,9 +26,13 @@ os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 preprocessor = ImagePreprocessor()
 detector = TrafficDetector(MODEL_PATH if os.path.exists(MODEL_PATH) else "yolov8s.pt")
 engine = ViolationEngine(detector.model)
-reader = PlateReader()
+plate_reader = PlateReader()
 evidence_gen = EvidenceGenerator()
 db = ViolationDB(DB_PATH)
+
+print("Warming up EasyOCR...")
+_ = plate_reader.reader.readtext(np.zeros((100, 100, 3), dtype=np.uint8))
+print("EasyOCR ready.")
 
 
 def generate_case_id():
@@ -65,7 +70,7 @@ def analyze():
         vehicles = detector.get_vehicles(detections)
         plate_text = None
         for v in vehicles:
-            result = reader.extract_plate(original, v["bbox"])
+            result = plate_reader.extract_plate(original, v["bbox"])
             if result["plate_text"]:
                 plate_text = result["plate_text"]
                 break
@@ -78,8 +83,9 @@ def analyze():
         annotated = evidence_gen.generate_evidence(
             original, detections, violations, metadata
         )
+        violations_dir = os.path.join(OUTPUT_DIR, "violations")
         annotated_path = evidence_gen.save_evidence(
-            annotated, case_id, OUTPUT_DIR
+            annotated, case_id, violations_dir
         )
         if violations:
             db.insert_violation(
@@ -133,6 +139,8 @@ def get_violations():
 @app.route("/evidence/<filename>")
 def serve_evidence(filename):
     violations_dir = os.path.join(OUTPUT_DIR, "violations")
+    if not os.path.isdir(violations_dir):
+        os.makedirs(violations_dir, exist_ok=True)
     return send_from_directory(violations_dir, filename)
 
 
