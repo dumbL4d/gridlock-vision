@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GridLock Vision — Analyze</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <header class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-yellow-400 tracking-tight">GridLock Vision</h1>
+    <p class="text-gray-400 text-sm mt-1">Upload traffic camera footage to detect violations</p>
+  </header>
+  <nav class="flex justify-center gap-3 mb-8">
+    <a href="/" class="px-4 py-1.5 text-sm rounded-lg border border-gray-700 text-gray-300 hover:border-yellow-400 hover:text-yellow-400 transition">Analyze</a>
+    <a href="/dashboard" class="px-4 py-1.5 text-sm rounded-lg border border-gray-700 text-gray-300 hover:border-yellow-400 hover:text-yellow-400 transition">Dashboard</a>
+  </nav>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl">
+    <h2 class="text-lg font-semibold text-gray-100 mb-4">Upload Image</h2>
+    <form id="uploadForm">
+      <label for="fileInput"
+             id="dropZone"
+             class="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-600 rounded-xl cursor-pointer hover:border-yellow-400 hover:bg-yellow-400/5 transition-all duration-200">
+        <span class="text-4xl mb-2" id="dropIcon">📷</span>
+        <span class="text-sm text-gray-400" id="dropText">Click or drop an image here</span>
+        <span class="text-sm text-yellow-400 font-medium mt-1 hidden" id="fileName"></span>
+        <input type="file" name="image" accept="image/jpeg,image/png" id="fileInput" class="hidden">
+      </label>
+      <div id="preview" class="mt-4 hidden">
+        <img id="previewImg" class="w-full max-h-64 object-contain rounded-xl border border-gray-700" alt="Preview">
+      </div>
+      <div class="mt-4">
+        <label class="block text-sm text-gray-400 mb-1" for="location">Location <span class="text-gray-600">(optional)</span></label>
+        <input type="text" id="location" name="location" placeholder="e.g. Andheri Junction"
+               class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400 transition">
+      </div>
+      <button type="submit" id="submitBtn"
+              class="mt-4 w-full py-2.5 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">
+        Analyze Image
+      </button>
+    </form>
+
+    <div id="spinner" class="hidden flex justify-center my-6">
+      <div class="w-7 h-7 border-2 border-gray-600 border-t-yellow-400 rounded-full animate-spin"></div>
+    </div>
+
+    <div id="errorMsg" class="hidden mt-4 p-3 text-sm text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg"></div>
+
+    <div id="result" class="hidden mt-6 space-y-4">
+      <h3 class="text-base font-semibold text-yellow-400 border-b border-gray-800 pb-2">Analysis Result</h3>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-gray-800 rounded-lg p-3 text-center"><div class="text-lg font-bold text-gray-100" id="rCaseId">—</div><div class="text-xs text-gray-500">Case ID</div></div>
+        <div class="bg-gray-800 rounded-lg p-3 text-center"><div class="text-lg font-bold text-gray-100"><span id="rTime">—</span> ms</div><div class="text-xs text-gray-500">Processing</div></div>
+        <div class="bg-gray-800 rounded-lg p-3 text-center"><div class="text-lg font-bold text-gray-100" id="rDetections">0</div><div class="text-xs text-gray-500">Detections</div></div>
+        <div class="bg-gray-800 rounded-lg p-3 text-center"><div class="text-lg font-bold text-yellow-400 font-mono text-sm truncate" id="rPlate">—</div><div class="text-xs text-gray-500">Plate</div></div>
+      </div>
+      <div id="violationsList" class="flex flex-wrap gap-2"></div>
+      <img id="resultImage" class="w-full rounded-xl border border-gray-700" alt="Annotated evidence">
+    </div>
+  </div>
+</div>
+
+<script>
+const VIOLATION_COLORS = {
+  HELMET_VIOLATION:    'bg-red-500/20 text-red-300 border-red-500/40',
+  ILLEGAL_PARKING:     'bg-orange-500/20 text-orange-300 border-orange-500/40',
+  TRIPLE_RIDING:       'bg-purple-500/20 text-purple-300 border-purple-500/40',
+  STOPLINE_VIOLATION:  'bg-yellow-500/20 text-yellow-300 border-yellow-500/40',
+  NO_SEATBELT:         'bg-blue-500/20 text-blue-300 border-blue-500/40',
+};
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const dropText = document.getElementById('dropText');
+const dropIcon = document.getElementById('dropIcon');
+const fileName = document.getElementById('fileName');
+const preview = document.getElementById('preview');
+const previewImg = document.getElementById('previewImg');
+const form = document.getElementById('uploadForm');
+const submitBtn = document.getElementById('submitBtn');
+const spinner = document.getElementById('spinner');
+const errorMsg = document.getElementById('errorMsg');
+const result = document.getElementById('result');
+const rCaseId = document.getElementById('rCaseId');
+const rTime = document.getElementById('rTime');
+const rDetections = document.getElementById('rDetections');
+const rPlate = document.getElementById('rPlate');
+const violationsList = document.getElementById('violationsList');
+const resultImage = document.getElementById('resultImage');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-yellow-400', 'bg-yellow-400/5'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-yellow-400', 'bg-yellow-400/5'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('border-yellow-400', 'bg-yellow-400/5'); if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFile(); } });
+fileInput.addEventListener('change', handleFile);
+
+function handleFile() {
+  const f = fileInput.files[0];
+  if (!f) return;
+  fileName.textContent = f.name;
+  fileName.classList.remove('hidden');
+  dropText.textContent = 'Selected:';
+  dropIcon.textContent = '🖼️';
+  const reader = new FileReader();
+  reader.onload = e => { previewImg.src = e.target.result; preview.classList.remove('hidden'); };
+  reader.readAsDataURL(f);
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!fileInput.files.length) return;
+  errorMsg.classList.add('hidden');
+  result.classList.add('hidden');
+  spinner.classList.remove('hidden');
+  submitBtn.disabled = true;
+  const fd = new FormData();
+  fd.append('image', fileInput.files[0]);
+  fd.append('location', document.getElementById('location').value);
+  try {
+    const res = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || 'Analysis failed'); return; }
+    rCaseId.textContent = data.case_id;
+    rTime.textContent = data.processing_time_ms;
+    rDetections.textContent = data.detections_count;
+    rPlate.textContent = data.plate_number || '—';
+    if (data.violations.length) {
+      violationsList.innerHTML = data.violations.map(v => {
+        const color = VIOLATION_COLORS[v.type] || 'bg-gray-500/20 text-gray-300 border-gray-500/40';
+        return `<span class="px-3 py-1 text-xs font-medium rounded-full border ${color}">${v.type} ${(v.confidence*100).toFixed(0)}%</span>`;
+      }).join('');
+    } else {
+      violationsList.innerHTML = '<span class="text-sm text-green-400">✅ No violations detected</span>';
+    }
+    resultImage.src = data.annotated_image_url + '?t=' + Date.now();
+    result.classList.remove('hidden');
+  } catch (err) { showError('Network error: ' + err.message); }
+  finally { spinner.classList.add('hidden'); submitBtn.disabled = false; }
+});
+
+function showError(msg) { errorMsg.textContent = msg; errorMsg.classList.remove('hidden'); }
+</script>
+</body>
+</html>

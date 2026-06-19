@@ -1,0 +1,31 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SQLite databases
+*.db
+
+# Uploaded images (keep test_samples/ manually if needed)
+data/test_images/*.jpg
+data/test_images/*.jpeg
+data/test_images/*.png
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output violation images (generated at runtime)
+outputs/violations/*.jpg

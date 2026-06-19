@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GridLock Vision — Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+<div class="max-w-7xl mx-auto px-4 py-8">
+  <header class="text-center mb-8">
+    <h1 class="text-3xl font-bold text-yellow-400 tracking-tight">GridLock Vision</h1>
+    <p class="text-gray-400 text-sm mt-1">Violation analytics dashboard</p>
+  </header>
+  <nav class="flex justify-center gap-3 mb-8">
+    <a href="/" class="px-4 py-1.5 text-sm rounded-lg border border-gray-700 text-gray-300 hover:border-yellow-400 hover:text-yellow-400 transition">Analyze</a>
+    <a href="/dashboard" class="px-4 py-1.5 text-sm rounded-lg border border-gray-700 text-gray-300 hover:border-yellow-400 hover:text-yellow-400 transition">Dashboard</a>
+  </nav>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="metricCards">
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 text-center"><div class="text-3xl font-bold text-yellow-400" id="mTotalToday">—</div><div class="text-sm text-gray-400 mt-1">Violations Today</div></div>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 text-center"><div class="text-3xl font-bold text-yellow-400" id="mTotalWeek">—</div><div class="text-sm text-gray-400 mt-1">This Week</div></div>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 text-center"><div class="text-lg font-bold text-yellow-400 truncate px-2" id="mTopType">—</div><div class="text-sm text-gray-400 mt-1">Most Common</div></div>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 text-center"><div class="text-3xl font-bold text-yellow-400" id="mUniquePlates">—</div><div class="text-sm text-gray-400 mt-1">Unique Plates</div></div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Violations by Type</h2>
+      <canvas id="typeChart" height="220"></canvas>
+    </div>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">Daily Trend (Last 7 Days)</h2>
+      <canvas id="trendChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Recent Violations</h2>
+      <input type="text" id="searchInput" placeholder="Search by plate or type..."
+             class="w-full sm:w-72 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 focus:border-yellow-400 transition">
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-800 text-gray-500 uppercase text-xs tracking-wider">
+            <th class="text-left py-3 px-2 font-medium">Case ID</th>
+            <th class="text-left py-3 px-2 font-medium">Timestamp</th>
+            <th class="text-left py-3 px-2 font-medium">Plate</th>
+            <th class="text-left py-3 px-2 font-medium">Violations</th>
+            <th class="text-left py-3 px-2 font-medium">Status</th>
+            <th class="text-right py-3 px-2 font-medium">Action</th>
+          </tr>
+        </thead>
+        <tbody id="violationsBody">
+          <tr><td colspan="6" class="text-center text-gray-500 py-8">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let typeChartInstance = null;
+let trendChartInstance = null;
+let allViolations = [];
+
+const VIOLATION_COLORS_MAP = {
+  HELMET_VIOLATION:   '#ef4444',
+  ILLEGAL_PARKING:    '#f97316',
+  TRIPLE_RIDING:      '#a855f7',
+  STOPLINE_VIOLATION: '#eab308',
+  NO_SEATBELT:        '#3b82f6',
+};
+
+async function loadStats() {
+  const [statsRes, violRes] = await Promise.all([
+    fetch('/api/stats'),
+    fetch('/violations'),
+  ]);
+  const stats = await statsRes.json();
+  allViolations = await violRes.json();
+
+  const daily = stats.daily_trend || {};
+  const typeData = stats.by_type || {};
+  const topPlates = stats.top_plates || {};
+
+  const today = new Date().toISOString().slice(0,10);
+  const todayCount = daily[today] || 0;
+  document.getElementById('mTotalToday').textContent = todayCount;
+
+  const weekTotal = Object.values(daily).reduce((a,b)=>a+b, 0);
+  document.getElementById('mTotalWeek').textContent = weekTotal;
+
+  const typeEntries = Object.entries(typeData).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('mTopType').textContent = typeEntries.length ? typeEntries[0][0] : '—';
+  document.getElementById('mUniquePlates').textContent = Object.keys(topPlates).length;
+
+  renderTypeChart(typeData);
+  renderTrendChart(daily);
+  renderTable(allViolations);
+}
+
+function renderTypeChart(data) {
+  const ctx = document.getElementById('typeChart').getContext('2d');
+  if (typeChartInstance) typeChartInstance.destroy();
+  const labels = Object.keys(data);
+  const values = Object.values(data);
+  const colors = labels.map(l => VIOLATION_COLORS_MAP[l] || '#6b7280');
+  typeChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Count', data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#94a3b8', maxRotation: 45, font: { size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#64748b', stepSize: 1, font: { size: 10 } }, grid: { color: '#1e293b' } },
+      },
+    },
+  });
+}
+
+function renderTrendChart(daily) {
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if (trendChartInstance) trendChartInstance.destroy();
+  const dates = Object.keys(daily).sort();
+  const counts = dates.map(d => daily[d]);
+  trendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        label: 'Violations', data: counts,
+        borderColor: '#facc15', backgroundColor: 'rgba(250,204,21,0.1)',
+        fill: true, tension: 0.3, pointBackgroundColor: '#facc15', pointRadius: 3, borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#64748b', stepSize: 1, font: { size: 10 } }, grid: { color: '#1e293b' } },
+      },
+    },
+  });
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('violationsBody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-8">No violations found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    let types = [];
+    try { types = JSON.parse(r.violation_types || '[]'); } catch(e) { types = [r.violation_types || '—']; }
+    const badges = types.map(t => {
+      const c = VIOLATION_COLORS_MAP[t] || '#6b7280';
+      return `<span class="inline-block px-2 py-0.5 text-xs rounded-full" style="color:${c};background:${c}20;border:1px solid ${c}40">${t}</span>`;
+    }).join(' ');
+    const statusColor = r.status === 'pending' ? 'text-yellow-400' : r.status === 'resolved' ? 'text-green-400' : 'text-gray-400';
+    return `<tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
+      <td class="py-3 px-2 font-mono text-xs text-gray-300">${r.case_id || '—'}</td>
+      <td class="py-3 px-2 text-gray-400 text-xs">${r.timestamp || '—'}</td>
+      <td class="py-3 px-2 font-mono text-xs text-yellow-400">${r.plate_number || '—'}</td>
+      <td class="py-3 px-2">${badges || '—'}</td>
+      <td class="py-3 px-2 text-xs ${statusColor} font-medium">${r.status || '—'}</td>
+      <td class="py-3 px-2 text-right">
+        ${r.annotated_image_path
+          ? `<a href="/evidence/${r.case_id}.jpg" target="_blank" class="text-xs text-yellow-400 hover:text-yellow-300 underline">View</a>`
+          : '<span class="text-xs text-gray-600">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('searchInput').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { renderTable(allViolations); return; }
+  const filtered = allViolations.filter(r => {
+    const plate = (r.plate_number || '').toLowerCase();
+    const types = (r.violation_types || '').toLowerCase();
+    return plate.includes(q) || types.includes(q);
+  });
+  renderTable(filtered);
+});
+
+loadStats();
+</script>
+</body>
+</html>
