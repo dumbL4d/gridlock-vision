@@ -6,7 +6,8 @@ import numpy as np
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_from_directory
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 
 from src.preprocess import ImagePreprocessor
 from src.detector import TrafficDetector
@@ -17,14 +18,12 @@ from src.database import ViolationDB
 from src.config import MODEL_PATH, DB_PATH, OUTPUT_DIR
 
 app = Flask(__name__)
-app.config["UPLOAD_FOLDER"] = os.path.join(
-    os.path.dirname(__file__), "..", "data", "test_images"
-)
+app.config["UPLOAD_FOLDER"] = os.path.join(BASE_DIR, "data", "test_images")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 preprocessor = ImagePreprocessor()
-detector = TrafficDetector(MODEL_PATH if os.path.exists(MODEL_PATH) else "yolov8s.pt")
+detector = TrafficDetector(MODEL_PATH if os.path.exists(MODEL_PATH) else os.path.join(BASE_DIR, "yolov8s.pt"))
 engine = ViolationEngine(detector.model)
 plate_reader = PlateReader()
 evidence_gen = EvidenceGenerator()
