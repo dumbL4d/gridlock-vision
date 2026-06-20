@@ -13,14 +13,19 @@ class PlateReader:
                             vehicle_bbox: list) -> np.ndarray:
         x1, y1, x2, y2 = [int(v) for v in vehicle_bbox]
         height = y2 - y1
-        crop_top = y2 - int(height * 0.3)
+        crop_top = y2 - int(height * 0.4)
         crop_top = max(y1, crop_top)
         crop_left = max(0, x1)
         crop_right = min(img.shape[1], x2)
         crop_bottom = min(img.shape[0], y2)
         if crop_bottom <= crop_top or crop_right <= crop_left:
             return np.zeros((10, 10, 3), dtype=np.uint8)
-        return img[crop_top:crop_bottom, crop_left:crop_right]
+        crop = img[crop_top:crop_bottom, crop_left:crop_right]
+        scale = max(1, 300 / crop.shape[1])
+        new_w = int(crop.shape[1] * scale)
+        new_h = int(crop.shape[0] * scale)
+        crop = cv2.resize(crop, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        return crop
 
     def read_plate(self, plate_img: np.ndarray,
                     debug: bool = False) -> dict:
@@ -30,9 +35,10 @@ class PlateReader:
             return {"plate_text": None, "confidence": 0.0,
                     "is_valid_format": False, "raw_text": ""}
         gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-        gray = clahe.apply(gray)
-        results = self.reader.readtext(gray)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        enhanced_bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        results = self.reader.readtext(enhanced_bgr)
         if debug:
             print(f"[DEBUG] Raw EasyOCR output ({len(results)} candidates):")
             for bbox, text, conf in results:
@@ -40,7 +46,7 @@ class PlateReader:
         best_text = ""
         best_conf = 0.0
         for bbox, text, conf in results:
-            if conf < 0.4:
+            if conf < 0.2:
                 continue
             cleaned = text.replace(' ', '').replace('-', '').replace('.', '').upper()
             if debug:
@@ -62,22 +68,17 @@ class PlateReader:
     def extract_plate(self, img: np.ndarray, vehicle_bbox: list,
                       debug: bool = False) -> dict:
         x1, y1, x2, y2 = [int(v) for v in vehicle_bbox]
-        height = y2 - y1
-        crop_top = max(y1, y2 - int(height * 0.3))
-        crop_left = max(0, x1)
-        crop_right = min(img.shape[1], x2)
-        crop_bottom = min(img.shape[0], y2)
         if debug:
+            height = y2 - y1
             print(f"[DEBUG] Vehicle bbox: [{x1}, {y1}, {x2}, {y2}]")
             print(f"[DEBUG] Plate region coords: "
-                  f"top={crop_top}, bottom={crop_bottom}, "
-                  f"left={crop_left}, right={crop_right}")
-        valid = (crop_bottom > crop_top and crop_right > crop_left
-                 and crop_bottom - crop_top >= 5
-                 and crop_right - crop_left >= 5)
+                  f"top={max(y1, y2 - int(height * 0.4))}, "
+                  f"bottom={min(img.shape[0], y2)}, "
+                  f"left={max(0, x1)}, "
+                  f"right={min(img.shape[1], x2)}")
+        region = self.detect_plate_region(img, vehicle_bbox)
         if debug:
-            print(f"[DEBUG] Crop valid: {valid}")
-        region = img[crop_top:crop_bottom, crop_left:crop_right] if valid else np.zeros((10, 10, 3), dtype=np.uint8)
+            print(f"[DEBUG] Crop region shape: {region.shape}")
         return self.read_plate(region, debug=debug)
 
     def draw_plate_annotation(self, img: np.ndarray,
