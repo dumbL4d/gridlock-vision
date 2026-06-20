@@ -1,3 +1,4 @@
+gunicorn
 ultralytics
 opencv-python
 easyocr

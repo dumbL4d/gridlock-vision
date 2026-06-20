@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: gridlock-vision
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app/app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
