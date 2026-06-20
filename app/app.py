@@ -1,12 +1,17 @@
-import os
 import sys
+import os
 import time
 import uuid
 import numpy as np
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_from_directory
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Build absolute path to project root regardless of where app is run from
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(APP_DIR)
+
+# Add both project root and src/ to path
+sys.path.insert(0, BASE_DIR)
 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 
 from src.preprocess import ImagePreprocessor
