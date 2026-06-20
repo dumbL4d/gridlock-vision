@@ -13,7 +13,7 @@ Gridlock Vision is an end-to-end system that detects traffic violations from ima
   - `ILLEGAL_PARKING` — vehicle parked in a no-parking zone (via zone mask)
   - `NO_SEATBELT` — driver without seatbelt
   - `STOPLINE_VIOLATION` — vehicle crossing a stop line
-- **License Plate Recognition** — detects and reads Indian license plates using EasyOCR with regex validation (`[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}`)
+- **License Plate Recognition** — detects and reads Indian license plates using EasyOCR with regex validation (`[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}`); crops from full bbox height with 60% bottom extension, upscales to 400px min width, applies CLAHE before OCR, and uses a low confidence threshold (0.04) letting the regex be the quality gate
 - **Evidence Generation** — draws annotated images with bounding boxes, violation badges, and metadata overlay
 - **Web Dashboard** — Flask-based UI for uploading images and viewing results with real-time analytics
 - **Analytics Engine** — violation type mapping, coverage analysis, daily trends, and BTP dataset integration
@@ -43,6 +43,30 @@ gridlock-vision/
 ├── data/                    # Test images and violation database
 ├── outputs/                 # Generated evidence images
 └── requirements.txt
+```
+
+### Processing Pipeline
+
+```mermaid
+flowchart TD
+    A[Input Image] --> B[Preprocessing<br/>CLAHE, Denoise, Sharpen]
+    B --> C[YOLOv8 Detection<br/>vehicles, persons]
+    C --> D{Violation Checks}
+    D --> E[Helmet Violation]
+    D --> F[Triple Riding]
+    D --> G[Illegal Parking]
+    D --> H[No Seatbelt]
+    D --> I[Stopline Violation]
+    C --> J[License Plate OCR<br/>Crop → CLAHE → EasyOCR → Regex]
+    E --> K[Evidence Generation<br/>Annotated overlay]
+    F --> K
+    G --> K
+    H --> K
+    I --> K
+    J --> K
+    K --> L[(SQLite DB)]
+    K --> M[Flask Web UI<br/>Review & Analytics]
+    L --> M
 ```
 
 ## Installation
