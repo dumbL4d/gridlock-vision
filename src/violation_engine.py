@@ -26,17 +26,21 @@ class ViolationEngine:
         motorcycles = [d for d in detections
                        if d["label"] in ("motorcycle",)]
         persons = [d for d in detections if d["label"] == "person"]
+        processed_persons = set()
         for mc in motorcycles:
             mx1, my1, mx2, my2 = mc["bbox"]
             crop_top = my1
             crop_bottom = my1 + (my2 - my1) * 0.4
             crop_left = mx1
             crop_right = mx2
-            for p in persons:
-                px1, py1, px2, py2 = p["bbox"]
+            for pi, p in enumerate(persons):
+                if pi in processed_persons:
+                    continue
                 iou = compute_iou(mc["bbox"], p["bbox"])
                 if iou < 0.1:
                     continue
+                processed_persons.add(pi)
+                px1, py1, px2, py2 = p["bbox"]
                 head_top = int(py1)
                 head_bottom = int(py1 + (py2 - py1) * 0.35)
                 head_left = int(max(crop_left, px1))
