@@ -13,16 +13,14 @@ class PlateReader:
                             vehicle_bbox: list) -> np.ndarray:
         x1, y1, x2, y2 = [int(v) for v in vehicle_bbox]
         h = y2 - y1
-        crop_top = y1 + int(h * 0.50)
-        crop_bottom = y1 + int(h * 0.95)
+        crop_top = max(0, y1)
+        crop_bottom = min(img.shape[0], y2 + int(h * 0.60))
         crop_left = max(0, x1)
         crop_right = min(img.shape[1], x2)
-        crop_top = max(0, crop_top)
-        crop_bottom = min(img.shape[0], crop_bottom)
         if crop_bottom <= crop_top or crop_right <= crop_left:
             return np.zeros((10, 10, 3), dtype=np.uint8)
         crop = img[crop_top:crop_bottom, crop_left:crop_right]
-        scale = max(1, 300 / crop.shape[1])
+        scale = max(1, 400 / crop.shape[1])
         new_w = int(crop.shape[1] * scale)
         new_h = int(crop.shape[0] * scale)
         crop = cv2.resize(crop, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
@@ -47,7 +45,7 @@ class PlateReader:
         best_text = ""
         best_conf = 0.0
         for bbox, text, conf in results:
-            if conf < 0.2:
+            if conf < 0.04:
                 continue
             cleaned = text.replace(' ', '').replace('-', '').replace('.', '').upper()
             if debug:
@@ -73,8 +71,8 @@ class PlateReader:
             height = y2 - y1
             print(f"[DEBUG] Vehicle bbox: [{x1}, {y1}, {x2}, {y2}]")
             print(f"[DEBUG] Plate region coords: "
-                  f"top={max(0, y1 + int(height * 0.50))}, "
-                  f"bottom={min(img.shape[0], y1 + int(height * 0.95))}, "
+                  f"top={max(0, y1)}, "
+                  f"bottom={min(img.shape[0], y2 + int(height * 0.60))}, "
                   f"left={max(0, x1)}, "
                   f"right={min(img.shape[1], x2)}")
         region = self.detect_plate_region(img, vehicle_bbox)
