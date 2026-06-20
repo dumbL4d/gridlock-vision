@@ -38,3 +38,5 @@ Thumbs.db
 
 # Output violation images (generated at runtime)
 outputs/violations/*.jpg
+models/yolov8n.pt
+analytics/*.png
