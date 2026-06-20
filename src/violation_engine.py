@@ -83,8 +83,8 @@ class ViolationEngine:
                     if not has_helmet:
                         violations.append({
                             "violation_type": "HELMET_VIOLATION",
-                            "confidence": 0.5,
-                            "bbox": [int(head_left), int(head_top),
+                            "confidence": round(p["confidence"], 3),
+                            "bbox": [int(head_top), int(head_left),
                                      int(head_right), int(head_bottom)],
                             "description": (
                                 "Motorcycle rider without helmet"
@@ -211,7 +211,7 @@ class ViolationEngine:
                 if not has_seatbelt:
                     violations.append({
                         "violation_type": "NO_SEATBELT",
-                        "confidence": 0.5,
+                        "confidence": round(c["confidence"], 3),
                         "bbox": [driver_left, driver_top,
                                  driver_right, driver_bottom],
                         "description": "Driver without seatbelt",
