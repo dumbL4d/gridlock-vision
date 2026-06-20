@@ -22,24 +22,36 @@ class PlateReader:
             return np.zeros((10, 10, 3), dtype=np.uint8)
         return img[crop_top:crop_bottom, crop_left:crop_right]
 
-    def read_plate(self, plate_img: np.ndarray) -> dict:
+    def read_plate(self, plate_img: np.ndarray,
+                    debug: bool = False) -> dict:
         if plate_img.size == 0 or plate_img.shape[0] < 5 or plate_img.shape[1] < 5:
+            if debug:
+                print(f"[DEBUG] Plate image too small: {plate_img.shape}")
             return {"plate_text": None, "confidence": 0.0,
                     "is_valid_format": False, "raw_text": ""}
         gray = cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
         gray = clahe.apply(gray)
         results = self.reader.readtext(gray)
+        if debug:
+            print(f"[DEBUG] Raw EasyOCR output ({len(results)} candidates):")
+            for bbox, text, conf in results:
+                print(f"  text='{text}' conf={conf:.3f}")
         best_text = ""
         best_conf = 0.0
         for bbox, text, conf in results:
             if conf < 0.4:
                 continue
-            cleaned = re.sub(r"[^A-Za-z0-9]", "", text).upper()
-            if len(cleaned) > best_conf:
+            cleaned = text.replace(' ', '').replace('-', '').replace('.', '').upper()
+            if debug:
+                print(f"[DEBUG]   Cleaned: '{text}' -> '{cleaned}'  conf={conf:.3f}")
+            if conf > best_conf:
                 best_text = cleaned
                 best_conf = conf
         is_valid = bool(self.plate_pattern.match(best_text)) if best_text else False
+        if debug:
+            print(f"[DEBUG] Best text: '{best_text}'  "
+                  f"Regex match: {is_valid}")
         return {
             "plate_text": best_text if is_valid else None,
             "confidence": round(best_conf, 3),
@@ -47,9 +59,26 @@ class PlateReader:
             "raw_text": best_text,
         }
 
-    def extract_plate(self, img: np.ndarray, vehicle_bbox: list) -> dict:
-        region = self.detect_plate_region(img, vehicle_bbox)
-        return self.read_plate(region)
+    def extract_plate(self, img: np.ndarray, vehicle_bbox: list,
+                      debug: bool = False) -> dict:
+        x1, y1, x2, y2 = [int(v) for v in vehicle_bbox]
+        height = y2 - y1
+        crop_top = max(y1, y2 - int(height * 0.3))
+        crop_left = max(0, x1)
+        crop_right = min(img.shape[1], x2)
+        crop_bottom = min(img.shape[0], y2)
+        if debug:
+            print(f"[DEBUG] Vehicle bbox: [{x1}, {y1}, {x2}, {y2}]")
+            print(f"[DEBUG] Plate region coords: "
+                  f"top={crop_top}, bottom={crop_bottom}, "
+                  f"left={crop_left}, right={crop_right}")
+        valid = (crop_bottom > crop_top and crop_right > crop_left
+                 and crop_bottom - crop_top >= 5
+                 and crop_right - crop_left >= 5)
+        if debug:
+            print(f"[DEBUG] Crop valid: {valid}")
+        region = img[crop_top:crop_bottom, crop_left:crop_right] if valid else np.zeros((10, 10, 3), dtype=np.uint8)
+        return self.read_plate(region, debug=debug)
 
     def draw_plate_annotation(self, img: np.ndarray,
                               vehicle_bbox: list,
@@ -83,7 +112,7 @@ if __name__ == "__main__":
         dets, _ = detector.detect(str(img_path))
         vehicles = detector.get_vehicles(dets)
         for v in vehicles:
-            result = reader.extract_plate(img_bgr, v["bbox"])
+            result = reader.extract_plate(img_bgr, v["bbox"], debug=True)
             status = "VALID" if result["is_valid_format"] else "INVALID"
             text = result["plate_text"] or result["raw_text"] or "N/A"
             print(f"  {v['label']:>12}  plate={text:>15}  "
