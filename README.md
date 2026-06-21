@@ -1,14 +1,3 @@
----
-title: GridLock Vision
-emoji: 🚦
-colorFrom: yellow
-colorTo: red
-sdk: docker
-app_file: app/app.py
-pinned: true
-license: mit
----
-
 # Gridlock Vision
 
 > AI-powered traffic violation detection system using computer vision and deep learning.
